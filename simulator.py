@@ -30,25 +30,39 @@ class ShaleSimulator:
         self.event_queue.append( (arrival_time, src, packet, phase, link) )
        #print(self.event_queue)
 
-    def spray_route(self, current, packet):
+    def spray_route(self, current, packet, method = "random"):
         """Spraying phase routing logic"""
         if packet.remaining_sprays is None:
             packet.remaining_sprays = self.h
+
+        # if packet.remaining_sprays == self.h:
+
 
         if packet.remaining_sprays > 0:
             phase = self.h - packet.remaining_sprays
             current_node = self.nodes[current]
             available_links = list(range(self.nodes_per_phase - 1))
 
-            # Power of Two Choices: Pick 2 random links, choose less congested
-            # if len(available_links) >= 2:
-            #     link1, link2 = random.sample(available_links, 2)
-            #     q1 = current_node.queue_lengths.get((phase, link1), 0)
-            #     q2 = current_node.queue_lengths.get((phase, link2), 0)
-            #     chosen_link = link1 if q1 <= q2 else link2
-            # else:
-            chosen_link = random.choice(available_links)
-
+            chosen_link = available_links[0]
+            #Power of Two Choices: Pick 2 random links, choose less congested
+            #Assume complete knoweldge (compensated for with tokens later)
+            if method == "choice":
+                link1, link2 = random.sample(available_links, 2)
+                q1 = self.nodes[current_node.adjacent[(phase, link1)]].cur_queue_length
+                q2 = self.nodes[current_node.adjacent[(phase, link2)]].cur_queue_length
+                chosen_link = link1 if q1 <= q2 else link2
+            elif method == "random":
+                chosen_link = random.choice(available_links)
+            elif method == "optimal":
+                minq = self.nodes[current_node.adjacent[(phase, 0)]].cur_queue_length
+                mini = 0
+                for i in available_links:
+                    q_len = self.nodes[current_node.adjacent[(phase, i)]].cur_queue_length
+                    if q_len<minq:
+                        minq=q_len
+                        mini=i
+                chosen_link=mini
+            
             packet.remaining_sprays -= 1
             return phase, chosen_link
             
@@ -67,7 +81,7 @@ class ShaleSimulator:
         
         return None, None  # Reached destination
 
-    def simulate(self, flows, max_timeslots=100):
+    def simulate(self, flows, max_timeslots=100, method = "random"):
         """Run simulation with queueing and link contention"""
         # Initialize event queue with source transmissions
         all_packets = []
@@ -84,24 +98,28 @@ class ShaleSimulator:
         #start simulation loop
         cur_time = 0
         
-        while self.event_queue and cur_time < max_timeslots:
+        while cur_time < max_timeslots:
+            #Receiving
             while self.event_queue and self.event_queue[0][0] == cur_time:
                 cur_time, dst, packet, arrival_phase, arrival_link = self.event_queue.pop(0)
                 
                 if dst == packet.dst:
-                    print(f"Packet {packet.id}, {packet.src}->{packet.dst} arrived at {cur_time}")
+                   #print(f"Packet {packet.id}, {packet.src}->{packet.dst} arrived at {cur_time}")
+                    packet.delivered = True
                     continue
                     
                 # Determine next hop
-                phase, link = self.spray_route(dst, packet)
-                if phase is None:
+                phase_to_take, link_to_take = self.spray_route(dst, packet, method)
+                if phase_to_take is None:
                     continue  # Packet reached destination
                     
 
                 # Assume global knowledge
                 # Add to queue in current node
-                self.nodes[dst].receive_packet(packet, phase, link, cur_time)
+                self.nodes[dst].receive_packet(packet, phase_to_take, link_to_take, cur_time)
             
+            
+            #Sending
             # Process all nodes for this timeslot
             for node in self.nodes:
                 node.process_timeslot(cur_time, self)
