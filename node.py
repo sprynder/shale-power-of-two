@@ -13,7 +13,9 @@ class Node:
         # Queue state: { (phase, link): deque() }
         self.queues = defaultdict(deque)
         self.adjacent = {}  # { (phase, link): node_id }
+        self.adjecent2 = {}
         self.schedule = {}
+        self.schedule2 = {}
         self.queue_lengths = defaultdict(int)
         # Link busy state: { (phase, link): busy_until_timeslot }
         self.link_busy = defaultdict(int)
@@ -33,9 +35,19 @@ class Node:
 
     def add_adjacent(self, phase, link, node_id):
         self.adjacent[(phase, link)] = node_id
+        # Initilizae queue lengths:
+        self.queue_lengths[(phase, link)] = 0
     
     def set_schedule(self, phase, link, id):
         self.schedule[id] = (phase,link)
+    
+    def construct_second_choice(self):
+        pass
+
+
+
+    def receive_token(self, phase, link, congest_val):
+        self.queue_lengths[(phase, link)] = congest_val
 
     def receive_packet(self, packet, phase, link, cur_time):
         """Add packet to queue for specified phase/link"""
@@ -48,12 +60,13 @@ class Node:
         if temp_sum>= self.max_summed_queue_length:
             self.max_summed_queue_length = temp_sum
         self.cur_queue_length = temp_sum
-        self.queue_lengths[(phase, link)] = len(self.queues[(phase, link)])
+        
         
     def process_timeslot(self, cur_time, simulator):
         """Attempt to send one packet per non-busy link"""
 
         cur_phase, cur_link = self.schedule[cur_time%len(self.schedule.items())] # Link that is currently open and connected / dest
+
         if (cur_phase, cur_link) in self.queues.keys():
             cur_q = self.queues[(cur_phase, cur_link)]
             if cur_q and len(cur_q) > 0:

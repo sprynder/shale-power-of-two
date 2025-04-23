@@ -48,8 +48,10 @@ class ShaleSimulator:
             #Assume complete knoweldge (compensated for with tokens later)
             if method == "choice":
                 link1, link2 = random.sample(available_links, 2)
-                q1 = self.nodes[current_node.adjacent[(phase, link1)]].cur_queue_length
-                q2 = self.nodes[current_node.adjacent[(phase, link2)]].cur_queue_length
+                # q1 = self.nodes[current_node.adjacent[(phase, link1)]].cur_queue_length
+                # q2 = self.nodes[current_node.adjacent[(phase, link2)]].cur_queue_length
+                q1 = current_node.queue_lengths[(phase, link1)]
+                q2 = current_node.queue_lengths[(phase,link2)]
                 chosen_link = link1 if q1 <= q2 else link2
             elif method == "random":
                 chosen_link = random.choice(available_links)
@@ -113,18 +115,23 @@ class ShaleSimulator:
                 if phase_to_take is None:
                     continue  # Packet reached destination
                     
-
-                # Assume global knowledge
                 # Add to queue in current node
                 self.nodes[dst].receive_packet(packet, phase_to_take, link_to_take, cur_time)
             
             
-            #Sending
+            # Sending
             # Process all nodes for this timeslot
             for node in self.nodes:
                 node.process_timeslot(cur_time, self)
-            self.event_queue.sort(key=lambda event: event[0])
 
+            # Simulate congestion control tokens backflow:
+            for node in self.nodes:
+                cur_phase, cur_link = node.schedule[cur_time%len(node.schedule.items())]
+                dst_node = self.nodes[node.adjacent[(cur_phase, cur_link)]]
+                node.receive_token(cur_phase, cur_link, dst_node.cur_queue_length)
+
+            self.event_queue.sort(key=lambda event: event[0])
+    
             cur_time += 1
         max_lengths = []
         max_sum_lengths = []
