@@ -72,15 +72,47 @@ class ShaleSimulator:
         current_node = self.nodes[current]
         dest_coord = self.nodes[packet.dst].coord
         
-        for phase in range(self.h):
-            curr_coord = current_node.coord[phase]
-            dest_phase_coord = dest_coord[phase]
-            
-            if curr_coord != dest_phase_coord:
-                offset = (dest_phase_coord - curr_coord) % self.nodes_per_phase
-                link = offset - 1
-                return phase, link
-        
+        if method == "random":
+            for phase in range(self.h):
+                curr_coord = current_node.coord[phase]
+                dest_phase_coord = dest_coord[phase]
+                
+                if curr_coord != dest_phase_coord:
+                    offset = (dest_phase_coord - curr_coord) % self.nodes_per_phase
+                    link = offset - 1
+                    return phase, link
+                
+        elif method == "choice":
+            for phase in range(self.h):
+                altPhase = (phase+self.h//2)%self.h
+                curr_coord = current_node.coord[phase]
+                dest_phase_coord = dest_coord[phase]
+                pairOne = None
+                pairTwo = None
+                if curr_coord != dest_phase_coord:
+                    offset = (dest_phase_coord - curr_coord) % self.nodes_per_phase
+                    link = offset - 1
+                    pairOne = (phase, link)
+                
+                curr_coord2 = current_node.coord[altPhase]
+                dest_phase_coord2 = dest_coord[altPhase]
+                
+                if curr_coord2 != dest_phase_coord2:
+                    offset = (dest_phase_coord2 - curr_coord2) % self.nodes_per_phase
+                    link = offset - 1
+                    pairTwo = (altPhase, link)
+
+                if pairOne and pairTwo:
+                    q1 = current_node.queue_lengths[current_node.adjacent[pairOne]]
+                    q2 = current_node.queue_lengths[current_node.adjacent[pairTwo]]
+                    chosen_path = pairOne if q1 <= q2 else pairTwo
+                    return chosen_path
+                elif pairOne and not pairTwo:
+                    return pairOne
+                elif pairTwo and not pairOne:
+                    return pairTwo
+                else:
+                    return None, None
         return None, None  # Reached destination
 
     def simulate(self, flows, max_timeslots=100, method = "random"):
@@ -130,6 +162,11 @@ class ShaleSimulator:
                 dst_node = self.nodes[node.adjacent[(cur_phase, cur_link)]]
                 node.receive_token(cur_phase, cur_link, dst_node.cur_queue_length)
 
+                #two choices
+                if method == "choice":
+                    altPhase = (cur_phase+self.h//2)%self.h
+                    dst_node = self.nodes[node.adjacent[(altPhase, cur_link)]]
+                    node.receive_token(altPhase, cur_link, dst_node.cur_queue_length, 2)
             self.event_queue.sort(key=lambda event: event[0])
     
             cur_time += 1
@@ -145,5 +182,6 @@ class ShaleSimulator:
     
     def stats(self):
         for node in self.nodes:
-            print(node.id,node.coord, node.adjacent)
+            print(node.id,node.coord, node.schedule)
+            #print(node.id, node.coord,node.adjacent2)
         

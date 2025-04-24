@@ -5,6 +5,7 @@ class Node:
     def __init__(self, node_id, h, nodes_per_phase):
         self.id = node_id
         self.h = h
+        self.cur_phase = 0
         self.nodes_per_phase = nodes_per_phase
         self.coord = self.id_to_coord(node_id)
         self.max_queue_length = 0
@@ -13,12 +14,10 @@ class Node:
         # Queue state: { (phase, link): deque() }
         self.queues = defaultdict(deque)
         self.adjacent = {}  # { (phase, link): node_id }
-        self.adjecent2 = {}
         self.schedule = {}
-        self.schedule2 = {}
         self.queue_lengths = defaultdict(int)
+
         # Link busy state: { (phase, link): busy_until_timeslot }
-        self.link_busy = defaultdict(int)
 
     def id_to_coord(self, node_id):
         coord = []
@@ -36,18 +35,28 @@ class Node:
     def add_adjacent(self, phase, link, node_id):
         self.adjacent[(phase, link)] = node_id
         # Initilizae queue lengths:
-        self.queue_lengths[(phase, link)] = 0
+        self.queue_lengths[node_id] = 0
     
     def set_schedule(self, phase, link, id):
         self.schedule[id] = (phase,link)
     
-    def construct_second_choice(self):
-        pass
+    # def construct_second_choice(self, mode = "offset"):
+    #     if mode == "offset":
+    #         offset = self.nodes_per_phase//2
+    #         for phase in range(self.h):
+    #             options = []
+    #             for i in range(self.nodes_per_phase-1):
+    #                 options.append(self.adjacent[(phase,i)])
+    #             # for link in range(self.nodes_per_phase-1):
+    #             #     self.adjacent2[(phase, link)] = options[(link+offset)%(self.nodes_per_phase-1)]
+    #         #Same cycle and phases, just offset
+        
 
 
 
     def receive_token(self, phase, link, congest_val):
-        self.queue_lengths[(phase, link)] = congest_val
+        node_id = self.adjacent[(phase, link)]
+        self.queue_lengths[node_id] = congest_val
 
     def receive_packet(self, packet, phase, link, cur_time):
         """Add packet to queue for specified phase/link"""
@@ -66,7 +75,7 @@ class Node:
         """Attempt to send one packet per non-busy link"""
 
         cur_phase, cur_link = self.schedule[cur_time%len(self.schedule.items())] # Link that is currently open and connected / dest
-
+        self.cur_phase = cur_phase
         if (cur_phase, cur_link) in self.queues.keys():
             cur_q = self.queues[(cur_phase, cur_link)]
             if cur_q and len(cur_q) > 0:

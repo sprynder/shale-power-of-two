@@ -19,8 +19,8 @@ def generate_flows(n, seed=None):
     flows = []
     for t in range(n):
         while True:
-            src = random.randint(0, 124)
-            dst = random.randint(0, 124)
+            src = random.randint(0, 15)
+            dst = random.randint(0, 15)
             if src != dst:
                 break
         flows.append((src, dst, random.randint(0,20)))
@@ -32,20 +32,24 @@ def generate_flows(n, seed=None):
 h = 3
 nodes = 5
 sim = ShaleSimulator(h=h, nodes_per_phase=nodes)  # 2D grid with 4 nodes per dimension
-# sim.stats()
+sim.stats()
 # (source, dest, start_time)
 
+
+
 #1000 - 42
-flow_size = 500000
+flow_size = 100000
 seed = 150
 flows = generate_flows(flow_size, seed)
 print(flows)
 method = "random"
 max_lengths, max_sum_lengths = sim.simulate(flows, max_timeslots=100000, method=method)
+
+
 plt.hist(max_sum_lengths)
 plt.ylabel("Number of Nodes")
 plt.xlabel("Max Queue Size")
-plt.savefig(f'{method}_max_sum_length_{flow_size}_{h}_{nodes}_{seed}.png')
+plt.savefig(f'{method}_max_sum_length_{flow_size}_{h}_{nodes}_{seed}_spray_and_direct.png')
 
 
 # Sample output:
