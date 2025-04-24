@@ -30,7 +30,7 @@ class ShaleSimulator:
         self.event_queue.append( (arrival_time, src, packet, phase, link) )
        #print(self.event_queue)
 
-    def spray_route(self, current, packet, method = "random"):
+    def spray_route(self, current, packet, spray_method = "random", direct_method = "random"):
         """Spraying phase routing logic"""
         if packet.remaining_sprays is None:
             packet.remaining_sprays = self.h
@@ -46,16 +46,16 @@ class ShaleSimulator:
             chosen_link = available_links[0]
             #Power of Two Choices: Pick 2 random links, choose less congested
             #Assume complete knoweldge (compensated for with tokens later)
-            if method == "choice":
+            if spray_method == "choice":
                 link1, link2 = random.sample(available_links, 2)
                 # q1 = self.nodes[current_node.adjacent[(phase, link1)]].cur_queue_length
                 # q2 = self.nodes[current_node.adjacent[(phase, link2)]].cur_queue_length
                 q1 = current_node.queue_lengths[(phase, link1)]
                 q2 = current_node.queue_lengths[(phase,link2)]
                 chosen_link = link1 if q1 <= q2 else link2
-            elif method == "random":
+            elif spray_method == "random":
                 chosen_link = random.choice(available_links)
-            elif method == "optimal":
+            elif spray_method == "optimal":
                 minq = self.nodes[current_node.adjacent[(phase, 0)]].cur_queue_length
                 mini = 0
                 for i in available_links:
@@ -72,7 +72,7 @@ class ShaleSimulator:
         current_node = self.nodes[current]
         dest_coord = self.nodes[packet.dst].coord
         
-        if method == "random":
+        if direct_method == "random":
             for phase in range(self.h):
                 curr_coord = current_node.coord[phase]
                 dest_phase_coord = dest_coord[phase]
@@ -82,7 +82,7 @@ class ShaleSimulator:
                     link = offset - 1
                     return phase, link
                 
-        elif method == "choice":
+        elif direct_method == "choice":
             for phase in range(self.h):
                 altPhase = (phase+self.h//2)%self.h
                 curr_coord = current_node.coord[phase]
@@ -115,7 +115,7 @@ class ShaleSimulator:
                     return None, None
         return None, None  # Reached destination
 
-    def simulate(self, flows, max_timeslots=100, method = "random"):
+    def simulate(self, flows, max_timeslots=100, spray_method = "random", direct_method = "random"):
         """Run simulation with queueing and link contention"""
         # Initialize event queue with source transmissions
         all_packets = []
@@ -143,7 +143,7 @@ class ShaleSimulator:
                     continue
                     
                 # Determine next hop
-                phase_to_take, link_to_take = self.spray_route(dst, packet, method)
+                phase_to_take, link_to_take = self.spray_route(dst, packet, spray_method, direct_method)
                 if phase_to_take is None:
                     continue  # Packet reached destination
                     
@@ -154,7 +154,7 @@ class ShaleSimulator:
             # Sending
             # Process all nodes for this timeslot
             for node in self.nodes:
-                node.process_timeslot(cur_time, self)
+                node.process_timeslot(cur_time, self, method=direct_method)
 
             # Simulate congestion control tokens backflow:
             for node in self.nodes:
@@ -162,11 +162,6 @@ class ShaleSimulator:
                 dst_node = self.nodes[node.adjacent[(cur_phase, cur_link)]]
                 node.receive_token(cur_phase, cur_link, dst_node.cur_queue_length)
 
-                #two choices
-                if method == "choice":
-                    altPhase = (cur_phase+self.h//2)%self.h
-                    dst_node = self.nodes[node.adjacent[(altPhase, cur_link)]]
-                    node.receive_token(altPhase, cur_link, dst_node.cur_queue_length, 2)
             self.event_queue.sort(key=lambda event: event[0])
     
             cur_time += 1
@@ -182,6 +177,5 @@ class ShaleSimulator:
     
     def stats(self):
         for node in self.nodes:
-            print(node.id,node.coord, node.schedule)
-            #print(node.id, node.coord,node.adjacent2)
+            print(node.id,node.coord, node.adjacent)
         
