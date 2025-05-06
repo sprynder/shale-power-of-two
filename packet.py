@@ -7,6 +7,8 @@ class Packet:
         self.path = [src]
         self.timeslots = [creation_time]
         self.remaining_sprays = None  # Set during routing
+        self.delivered = False
+        self.delivered_time = -1
 
 
     def __str__(self):
