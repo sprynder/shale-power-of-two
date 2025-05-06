@@ -83,42 +83,44 @@ class ShaleSimulator:
                     return phase, link
                 
         elif direct_method == "choice":
-            for phase in range(self.h):
-                altPhase = (phase+self.h//2)%self.h
-                curr_coord = current_node.coord[phase]
-                dest_phase_coord = dest_coord[phase]
-                pairOne = None
-                pairTwo = None
-                if curr_coord != dest_phase_coord:
-                    offset = (dest_phase_coord - curr_coord) % self.nodes_per_phase
-                    link = offset - 1
-                    pairOne = (phase, link)
-                
-                curr_coord2 = current_node.coord[altPhase]
-                dest_phase_coord2 = dest_coord[altPhase]
-                
-                if curr_coord2 != dest_phase_coord2:
-                    offset = (dest_phase_coord2 - curr_coord2) % self.nodes_per_phase
-                    link = offset - 1
-                    pairTwo = (altPhase, link)
+            if current_node.coord == dest_coord:
+                return None, None # At destination
+            else:
 
-                if pairOne and pairTwo:
-                    q1 = current_node.queue_lengths[current_node.adjacent[pairOne]]
-                    q2 = current_node.queue_lengths[current_node.adjacent[pairTwo]]
-                    chosen_path = pairOne if q1 <= q2 else pairTwo
-                    return chosen_path
-                elif pairOne and not pairTwo:
-                    return pairOne
-                elif pairTwo and not pairOne:
-                    return pairTwo
-                else:
-                    return None, None
-        return None, None  # Reached destination
+                for phase in range(self.h): #Find first misaligned phase
+                    altPhase = (phase+self.h//2)%self.h
+                    if current_node.coord[phase]==dest_coord[phase] and current_node.coord[altPhase]==dest_coord[altPhase]:
+                        continue
+                    else:
+                        curr_coord = current_node.coord[phase]
+                        dest_phase_coord = dest_coord[phase]
+                        curr_coord2 = current_node.coord[altPhase]
+                        dest_phase_coord2 = dest_coord[altPhase]
+                        pairOne = None
+                        pairTwo = None
+                        offset = (dest_phase_coord - curr_coord) % self.nodes_per_phase
+                        link = offset - 1
+                        pairOne = (phase, link)
+                        offset = (dest_phase_coord2 - curr_coord2) % self.nodes_per_phase
+                        link = offset - 1
+                        pairTwo = (altPhase, link)
+                        if current_node.coord[phase]!=dest_coord[phase] and current_node.coord[altPhase]!=dest_coord[altPhase]:
+                            
+                            q1 = current_node.queue_lengths[current_node.adjacent[pairOne]]
+                            q2 = current_node.queue_lengths[current_node.adjacent[pairTwo]]
+                            chosen_path = pairOne if q1 <= q2 else pairTwo
+                            return chosen_path
+                        elif current_node.coord[phase]==dest_coord[phase]:
+                            return pairTwo
+                        elif current_node.coord[altPhase]==dest_coord[altPhase]:
+                            return pairOne
+            return None, None  # Reached destination
 
     def simulate(self, flows, max_timeslots=100, spray_method = "random", direct_method = "random"):
         """Run simulation with queueing and link contention"""
         # Initialize event queue with source transmissions
         all_packets = []
+        delivered_packets = []
         counter = 0
         for src, dst, arrival_time in flows:
             packet = Packet(src, dst, arrival_time, counter)
@@ -138,8 +140,10 @@ class ShaleSimulator:
                 cur_time, dst, packet, arrival_phase, arrival_link = self.event_queue.pop(0)
                 
                 if dst == packet.dst:
-                   #print(f"Packet {packet.id}, {packet.src}->{packet.dst} arrived at {cur_time}")
+                    #print(f"Packet {packet.id}, {packet.src}->{packet.dst} arrived at {cur_time}")
                     packet.delivered = True
+                    delivered_packets.append(packet)
+                    packet.delivered_time = cur_time
                     continue
                     
                 # Determine next hop
@@ -161,19 +165,28 @@ class ShaleSimulator:
                 cur_phase, cur_link = node.schedule[cur_time%len(node.schedule.items())]
                 dst_node = self.nodes[node.adjacent[(cur_phase, cur_link)]]
                 node.receive_token(cur_phase, cur_link, dst_node.cur_queue_length)
+                altPhase = (cur_phase+self.h//2)%self.h
+                dst_node = self.nodes[node.adjacent[(altPhase, cur_link)]]
+                node.receive_token(altPhase, cur_link, dst_node.cur_queue_length)
 
             self.event_queue.sort(key=lambda event: event[0])
     
             cur_time += 1
+            if len(all_packets)==len(delivered_packets): # All delivered
+                break
         max_lengths = []
         max_sum_lengths = []
         for i, node in enumerate(self.nodes):
-            print(i, node.max_queue_length, node.max_summed_queue_length)
+            #print(i, node.max_queue_length, node.max_summed_queue_length)
             max_lengths.append(node.max_queue_length)
             max_sum_lengths.append(node.max_summed_queue_length)
+        latencies = []
+        for p in all_packets:
+            latencies.append(p.delivered_time - p.creation_time)
         # for i, packet in enumerate(all_packets):
-        #     print(i, packet.path)
-        return max_lengths, max_sum_lengths
+        #     print(i, packet.delivered, packet.path)
+        throughput = len(delivered_packets)/cur_time
+        return max_lengths, max_sum_lengths, throughput, latencies
     
     def stats(self):
         for node in self.nodes:
